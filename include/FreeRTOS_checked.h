@@ -4,7 +4,7 @@
 #include <stdchecked.h>
 #include "FreeRTOS.h"
 #include <task.h>
-
+//TODO: Clean up this mess
 #pragma CHECKED_SCOPE ON
 #define xQueueHandle_t const ptr<struct QueueDefinition>
 ptr<void> getObjectFromHandle(ptr<void> handle);
