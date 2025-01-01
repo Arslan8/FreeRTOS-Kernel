@@ -3510,6 +3510,7 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
 #endif /* ( ( INCLUDE_xTaskResumeFromISR == 1 ) && ( INCLUDE_vTaskSuspend == 1 ) ) */
 /*-----------------------------------------------------------*/
 
+PRIVILEGED_FUNCTION
 static BaseType_t prvCreateIdleTasks( void )
 {
     BaseType_t xReturn = pdPASS;
@@ -8642,6 +8643,7 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
  * it's own implementation of vApplicationGetIdleTaskMemory by setting
  * configKERNEL_PROVIDED_STATIC_MEMORY to 0 or leaving it undefined.
  */
+	PRIVILEGED_FUNCTION
     void vApplicationGetIdleTaskMemory( StaticTask_t ** ppxIdleTaskTCBBuffer,
                                         StackType_t ** ppxIdleTaskStackBuffer,
                                         uint32_t * pulIdleTaskStackSize )

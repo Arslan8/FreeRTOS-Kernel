@@ -741,6 +741,7 @@ static void prvRestoreContextOfFirstTask( void )
 /*
  * See header file for description.
  */
+PRIVILEGED_FUNCTION
 BaseType_t xPortStartScheduler( void )
 {
     /* An application can install FreeRTOS interrupt handlers in one of the
