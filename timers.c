@@ -234,6 +234,7 @@
                                        Timer_t * pxNewTimer ) PRIVILEGED_FUNCTION;
 /*-----------------------------------------------------------*/
 
+	PRIVILEGED_FUNCTION
     BaseType_t xTimerCreateTimerTask( void )
     {
         BaseType_t xReturn = pdFAIL;

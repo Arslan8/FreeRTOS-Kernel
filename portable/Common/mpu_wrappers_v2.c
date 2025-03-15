@@ -245,7 +245,11 @@
 /**
  * @brief Kernel object pool.
  */
-    PRIVILEGED_DATA static KernelObject_t xKernelObjectPool[ configPROTECTED_KERNEL_OBJECT_POOL_SIZE ] = { NULL };
+
+PRIVILEGED_DATA
+static KernelObject_t xKernelObjectPool[ configPROTECTED_KERNEL_OBJECT_POOL_SIZE ] = {
+    [0 ... configPROTECTED_KERNEL_OBJECT_POOL_SIZE-1] = { (OpaqueObjectHandle_t)NULL, 0, NULL }
+};
 /*-----------------------------------------------------------*/
 
     static int32_t MPU_GetFreeIndexInKernelObjectPool( void ) /* PRIVILEGED_FUNCTION */

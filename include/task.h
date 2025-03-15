@@ -1999,7 +1999,7 @@ char * pcTaskGetName( TaskHandle_t xTaskToQuery ) PRIVILEGED_FUNCTION;
  */
     void vApplicationGetIdleTaskMemory( StaticTask_t ** ppxIdleTaskTCBBuffer,
                                         StackType_t ** ppxIdleTaskStackBuffer,
-                                        uint32_t * pulIdleTaskStackSize );
+                                        uint32_t * pulIdleTaskStackSize ) PRIVILEGED_FUNCTION;
 
 /**
  * task.h
