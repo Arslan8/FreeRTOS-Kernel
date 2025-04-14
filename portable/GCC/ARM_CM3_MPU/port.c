@@ -162,7 +162,7 @@ void vPortSetupTimerInterrupt( void );
  * Standard FreeRTOS exception handlers.
  */
 void xPortPendSVHandler( void ) __attribute__( ( naked ) ) PRIVILEGED_FUNCTION;
-void xPortSysTickHandler( void )  __attribute__( ( optimize( "3" ) ) ) PRIVILEGED_FUNCTION;
+void xPortSysTickHandler( void )  PRIVILEGED_FUNCTION;
 void vPortSVCHandler( void ) __attribute__( ( naked ) ) PRIVILEGED_FUNCTION;
 
 /*
@@ -442,8 +442,8 @@ void vSVCHandler_C( uint32_t * pulParam ) /* PRIVILEGED_FUNCTION */
                                            * svc was raised from any of the
                                            * system calls. */
 
-                if( ( ulPC >= ( uint32_t ) __syscalls_flash_start__ ) &&
-                    ( ulPC <= ( uint32_t ) __syscalls_flash_end__ ) )
+                if( ( ulPC >= ( uint32_t ) &__syscalls_flash_start__ ) &&
+                    ( ulPC <= ( uint32_t ) &__syscalls_flash_end__ ) )
                 {
                     __asm volatile
                     (
@@ -512,8 +512,8 @@ void vSVCHandler_C( uint32_t * pulParam ) /* PRIVILEGED_FUNCTION */
          *    because the assembly SVC handler checks that before calling
          *    this function.
          */
-        if( ( ulSystemCallLocation >= ( uint32_t ) __syscalls_flash_start__ ) &&
-            ( ulSystemCallLocation <= ( uint32_t ) __syscalls_flash_end__ ) &&
+        if( ( ulSystemCallLocation >= ( uint32_t ) &__syscalls_flash_start__ ) &&
+            ( ulSystemCallLocation <= ( uint32_t ) &__syscalls_flash_end__ ) &&
             ( pxMpuSettings->xSystemCallStackInfo.pulTaskStack == NULL ) &&
             ( uxSystemCallImplementations[ ucSystemCallNumber ] != ( UBaseType_t ) 0 ) )
         {
@@ -619,8 +619,8 @@ void vSVCHandler_C( uint32_t * pulParam ) /* PRIVILEGED_FUNCTION */
          *    application is not attempting to exit without entering a system
          *    call.
          */
-        if( ( ulSystemCallLocation >= ( uint32_t ) __privileged_functions_start__ ) &&
-            ( ulSystemCallLocation <= ( uint32_t ) __privileged_functions_end__ ) &&
+        if( ( ulSystemCallLocation >= ( uint32_t ) &__privileged_functions_start__ ) &&
+            ( ulSystemCallLocation <= ( uint32_t ) &__privileged_functions_end__ ) &&
             ( pxMpuSettings->xSystemCallStackInfo.pulTaskStack != NULL ) )
         {
             pulTaskStack = pxMpuSettings->xSystemCallStackInfo.pulTaskStack;
@@ -1026,12 +1026,13 @@ void xPortPendSVHandler( void )
         " ldmia r2!, {r4-r11}                   \n" /* Read 4 sets of MPU registers [MPU Region # 0 - 3]. */
         " stmia r0, {r4-r11}                    \n" /* Write 4 sets of MPU registers [MPU Region # 0 - 3]. */
         "                                       \n"
+        "                                       \n"
         " ldr r0, =0xe000ed94                   \n" /* MPU_CTRL register. */
         " ldr r3, [r0]                          \n" /* Read the value of MPU_CTRL. */
         " orr r3, #1                            \n" /* r3 = r3 | 1 i.e. Set the bit 0 in r3. */
         " str r3, [r0]                          \n" /* Enable MPU. */
         " dsb                                   \n" /* Force memory writes before continuing. */
-        "                                       \n"
+
         /*---------- Restore Context. ---------- */
         " ldr r3, pxCurrentTCBConst             \n" /* r3 = pxCurrentTCBConst. */
         " ldr r2, [r3]                          \n" /* r2 = pxCurrentTCB. */
@@ -1092,7 +1093,8 @@ __attribute__( ( weak ) ) void vPortSetupTimerInterrupt( void )
     portNVIC_SYSTICK_CTRL_REG = ( portNVIC_SYSTICK_CLK | portNVIC_SYSTICK_INT | portNVIC_SYSTICK_ENABLE );
 }
 /*-----------------------------------------------------------*/
-
+unsigned int bar[4];
+unsigned int att[4];
 static void prvSetupMPU( void )
 {
     extern uint32_t __privileged_functions_start__[];
@@ -1106,36 +1108,63 @@ static void prvSetupMPU( void )
     if( portMPU_TYPE_REG == portEXPECTED_MPU_TYPE_VALUE )
     {
         /* First setup the unprivileged flash for unprivileged read only access. */
-        portMPU_REGION_BASE_ADDRESS_REG = ( ( uint32_t ) __FLASH_segment_start__ ) | /* Base address. */
+        portMPU_REGION_BASE_ADDRESS_REG = ( ( uint32_t ) &__FLASH_segment_start__ ) | /* Base address. */
+                                          ( portMPU_REGION_VALID ) |
+                                          ( portUNPRIVILEGED_FLASH_REGION );
+		bar[0] = ( ( uint32_t ) &__FLASH_segment_start__ ) | /* Base address. */
                                           ( portMPU_REGION_VALID ) |
                                           ( portUNPRIVILEGED_FLASH_REGION );
 
         portMPU_REGION_ATTRIBUTE_REG = ( portMPU_REGION_READ_ONLY ) |
                                        ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
-                                       ( prvGetMPURegionSizeSetting( ( uint32_t ) __FLASH_segment_end__ - ( uint32_t ) __FLASH_segment_start__ ) ) |
+                                       ( prvGetMPURegionSizeSetting( ( uint32_t )&__FLASH_segment_end__ - ( uint32_t ) &__FLASH_segment_start__ ) ) |
+                                       ( portMPU_REGION_ENABLE );
+
+		att[0] = ( portMPU_REGION_READ_ONLY ) |
+                                       ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
+                                       ( prvGetMPURegionSizeSetting( ( uint32_t )&__FLASH_segment_end__ - ( uint32_t ) &__FLASH_segment_start__ ) ) |
                                        ( portMPU_REGION_ENABLE );
 
         /* Setup the privileged flash for privileged only access.  This is where
          * the kernel code is * placed. */
-        portMPU_REGION_BASE_ADDRESS_REG = ( ( uint32_t ) __privileged_functions_start__ ) | /* Base address. */
+        portMPU_REGION_BASE_ADDRESS_REG = ( ( uint32_t ) &__privileged_functions_start__ ) | /* Base address. */
+                                          ( portMPU_REGION_VALID ) |
+                                          ( portPRIVILEGED_FLASH_REGION );
+
+		bar[1] = ( ( uint32_t ) &__privileged_functions_start__ ) | /* Base address. */
                                           ( portMPU_REGION_VALID ) |
                                           ( portPRIVILEGED_FLASH_REGION );
 
         portMPU_REGION_ATTRIBUTE_REG = ( portMPU_REGION_PRIVILEGED_READ_ONLY ) |
                                        ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
-                                       ( prvGetMPURegionSizeSetting( ( uint32_t ) __privileged_functions_end__ - ( uint32_t ) __privileged_functions_start__ ) ) |
+                                       ( prvGetMPURegionSizeSetting( ( uint32_t ) &__privileged_functions_end__ - ( uint32_t ) &__privileged_functions_start__ ) ) |
+                                       ( portMPU_REGION_ENABLE );
+
+
+		att[1] = ( portMPU_REGION_PRIVILEGED_READ_ONLY ) |
+                                       ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
+                                       ( prvGetMPURegionSizeSetting( ( uint32_t ) &__privileged_functions_end__ - ( uint32_t ) &__privileged_functions_start__ ) ) |
                                        ( portMPU_REGION_ENABLE );
 
         /* Setup the privileged data RAM region.  This is where the kernel data
          * is placed. */
-        portMPU_REGION_BASE_ADDRESS_REG = ( ( uint32_t ) __privileged_data_start__ ) | /* Base address. */
+        portMPU_REGION_BASE_ADDRESS_REG = ( ( uint32_t ) &__privileged_data_start__ ) | /* Base address. */
+                                          ( portMPU_REGION_VALID ) |
+                                          ( portPRIVILEGED_RAM_REGION );
+
+		bar[2] = ( ( uint32_t ) &__privileged_data_start__ ) | /* Base address. */
                                           ( portMPU_REGION_VALID ) |
                                           ( portPRIVILEGED_RAM_REGION );
 
         portMPU_REGION_ATTRIBUTE_REG = ( portMPU_REGION_PRIVILEGED_READ_WRITE ) |
                                        ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
                                        ( portMPU_REGION_EXECUTE_NEVER ) |
-                                       prvGetMPURegionSizeSetting( ( uint32_t ) __privileged_data_end__ - ( uint32_t ) __privileged_data_start__ ) |
+                                       prvGetMPURegionSizeSetting( ( uint32_t ) &__privileged_data_end__ - ( uint32_t ) &__privileged_data_start__ ) |
+                                       ( portMPU_REGION_ENABLE );
+		att[2] = ( portMPU_REGION_PRIVILEGED_READ_WRITE ) |
+                                       ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
+                                       ( portMPU_REGION_EXECUTE_NEVER ) |
+                                       prvGetMPURegionSizeSetting( ( uint32_t ) &__privileged_data_end__ - ( uint32_t ) &__privileged_data_start__ ) |
                                        ( portMPU_REGION_ENABLE );
 
         /* By default allow everything to access the general peripherals.  The
@@ -1144,7 +1173,14 @@ static void prvSetupMPU( void )
                                           ( portMPU_REGION_VALID ) |
                                           ( portGENERAL_PERIPHERALS_REGION );
 
+		bar[3]= ( portPERIPHERALS_START_ADDRESS ) |
+                                          ( portMPU_REGION_VALID ) |
+                                          ( portGENERAL_PERIPHERALS_REGION );
+
         portMPU_REGION_ATTRIBUTE_REG = ( portMPU_REGION_READ_WRITE | portMPU_REGION_EXECUTE_NEVER ) |
+                                       ( prvGetMPURegionSizeSetting( portPERIPHERALS_END_ADDRESS - portPERIPHERALS_START_ADDRESS ) ) |
+                                       ( portMPU_REGION_ENABLE );
+		att[3] = ( portMPU_REGION_READ_WRITE | portMPU_REGION_EXECUTE_NEVER ) |
                                        ( prvGetMPURegionSizeSetting( portPERIPHERALS_END_ADDRESS - portPERIPHERALS_START_ADDRESS ) ) |
                                        ( portMPU_REGION_ENABLE );
 
@@ -1240,7 +1276,7 @@ void vPortStoreTaskMPUSettings( xMPU_SETTINGS * xMPUSettings,
     {
         /* No MPU regions are specified so allow access to all RAM. */
         xMPUSettings->xRegion[ 0 ].ulRegionBaseAddress =
-            ( ( uint32_t ) __SRAM_segment_start__ ) | /* Base address. */
+            ( ( uint32_t ) &__SRAM_segment_start__ ) | /* Base address. */
             ( portMPU_REGION_VALID ) |
             ( portSTACK_REGION );                     /* Region number. */
 
@@ -1248,11 +1284,11 @@ void vPortStoreTaskMPUSettings( xMPU_SETTINGS * xMPUSettings,
             ( portMPU_REGION_READ_WRITE ) |
             ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
             ( portMPU_REGION_EXECUTE_NEVER ) |
-            ( prvGetMPURegionSizeSetting( ( uint32_t ) __SRAM_segment_end__ - ( uint32_t ) __SRAM_segment_start__ ) ) |
+            ( prvGetMPURegionSizeSetting( ( uint32_t ) &__SRAM_segment_end__ - ( uint32_t ) &__SRAM_segment_start__ ) ) |
             ( portMPU_REGION_ENABLE );
 
-        xMPUSettings->xRegionSettings[ 0 ].ulRegionStartAddress = ( uint32_t ) __SRAM_segment_start__;
-        xMPUSettings->xRegionSettings[ 0 ].ulRegionEndAddress = ( uint32_t ) __SRAM_segment_end__;
+        xMPUSettings->xRegionSettings[ 0 ].ulRegionStartAddress = ( uint32_t ) &__SRAM_segment_start__;
+        xMPUSettings->xRegionSettings[ 0 ].ulRegionEndAddress = ( uint32_t ) &__SRAM_segment_end__;
         xMPUSettings->xRegionSettings[ 0 ].ulRegionPermissions = ( tskMPU_READ_PERMISSION |
                                                                    tskMPU_WRITE_PERMISSION );
 
