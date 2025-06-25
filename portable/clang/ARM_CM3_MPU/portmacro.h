@@ -88,7 +88,7 @@ typedef unsigned long    UBaseType_t;
 
 #define portSTACK_REGION                                         ( 3UL )
 #define portGENERAL_PERIPHERALS_REGION                           ( 4UL )
-#define portUNPRIVILEGED_FLASH_REGION                            ( 0UL )
+#define portUNPRIVILEGED_FLASH_REGION                            ( 5UL )
 #define CODREGION (5UL)
 #define DATAREGION (1UL)
 #define BRIDGE     (2UL)
@@ -96,7 +96,7 @@ typedef unsigned long    UBaseType_t;
 #define portPRIVILEGED_RAM_REGION                                ( 7UL )
 #define portFIRST_CONFIGURABLE_REGION                            ( 0UL )
 #define portLAST_CONFIGURABLE_REGION                             ( 2UL )
-#define portUNPRIVILEGED_TASK_FLASH_REGION					     ( 5UL )
+#define portUNPRIVILEGED_TASK_FLASH_REGION					     ( 2UL )
 #define portNUM_CONFIGURABLE_REGIONS                             ( ( portLAST_CONFIGURABLE_REGION - portFIRST_CONFIGURABLE_REGION ) + 1 )
 #define portTOTAL_NUM_REGIONS_IN_TCB                             ( portNUM_CONFIGURABLE_REGIONS + 1 )     /* Plus one to make space for the stack region. */
 

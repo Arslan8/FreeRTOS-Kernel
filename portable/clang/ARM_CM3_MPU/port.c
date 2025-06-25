@@ -801,7 +801,8 @@ BaseType_t xPortStartScheduler( void )
         ucMaxPriorityValue = *pucFirstUserPriorityRegister;
 
         /* Use the same mask on the maximum system call priority. */
-        ucMaxSysCallPriority = configMAX_SYSCALL_INTERRUPT_PRIORITY & ucMaxPriorityValue;
+		volatile uint8_t temp = configMAX_SYSCALL_INTERRUPT_PRIORITY;
+        ucMaxSysCallPriority = temp & ucMaxPriorityValue;
 
         /* Check that the maximum system call priority is nonzero after
          * accounting for the number of priority bits supported by the
@@ -1328,7 +1329,8 @@ void vPortStoreTaskMPUSettings( xMPU_SETTINGS * xMPUSettings,
 	extern uint32_t __End_RAM;
 	extern uint32_t __syscalls_flash_end__[];
 	extern uint32_t __privileged_functions_region_size__;
-
+	extern uint32_t __bridge_end__;
+	extern uint32_t __privileged_functions_end__[];
     int32_t lIndex;
     uint32_t ul;
 
@@ -1403,8 +1405,8 @@ void vPortStoreTaskMPUSettings( xMPU_SETTINGS * xMPUSettings,
 	current.ulParameters = portMPU_REGION_READ_WRITE;
 	translateGeneric(xMPUSettings, 2,  DATAREGION, &current);
 
-	current.ulLengthInBytes = (unsigned int)&__privileged_functions_region_size__;
-	current.pvBaseAddress = &__privileged_functions_region_size__;
+	current.ulLengthInBytes = (unsigned int)&__bridge_end__ - (uint32_t) &__privileged_functions_end__;
+	current.pvBaseAddress = &__privileged_functions_end__;
 	current.ulParameters = portMPU_REGION_READ_ONLY;
 	translateGeneric(xMPUSettings, 3,  BRIDGE, &current);
 
