@@ -801,7 +801,8 @@ BaseType_t xPortStartScheduler( void )
         ucMaxPriorityValue = *pucFirstUserPriorityRegister;
 
         /* Use the same mask on the maximum system call priority. */
-        ucMaxSysCallPriority = configMAX_SYSCALL_INTERRUPT_PRIORITY & ucMaxPriorityValue;
+		volatile uint8_t temp = configMAX_SYSCALL_INTERRUPT_PRIORITY;
+        ucMaxSysCallPriority = temp & ucMaxPriorityValue;
 
         /* Check that the maximum system call priority is nonzero after
          * accounting for the number of priority bits supported by the
@@ -1025,7 +1026,25 @@ void xPortPendSVHandler( void )
         "                                       \n"
         " ldr r0, =0xe000ed9c                   \n" /* Region Base Address register. */
         " ldmia r2!, {r4-r11}                   \n" /* Read 4 sets of MPU registers [MPU Region # 0 - 3]. */
-        " stmia r0, {r4-r11}                    \n" /* Write 4 sets of MPU registers [MPU Region # 0 - 3]. */
+		" str r4, [r0] 							\n"
+		" ldr r0, =0xE000EDA0                   \n" /* Region MPU_RASR */
+		" str r5, [r0]                          \n"
+
+		" ldr r0, =0xe000ed9c                   \n" /* Region Base Address register. */
+		" str r6, [r0]                          \n"
+		" ldr r0, =0xE000EDA0                   \n" /* Region MPU_RASR */
+        " str r7, [r0]                          \n"
+
+		" ldr r0, =0xe000ed9c                   \n" /* Region Base Address register. */
+        " str r8, [r0]                          \n"
+        " ldr r0, =0xE000EDA0                   \n" /* Region MPU_RASR */
+        " str r9, [r0]                          \n"
+
+		" ldr r0, =0xe000ed9c                   \n" /* Region Base Address register. */
+        " str r10, [r0]                          \n"
+        " ldr r0, =0xE000EDA0                   \n" /* Region MPU_RASR */
+        " str r11, [r0]                          \n"
+
         "                                       \n"
         "                                       \n"
         " ldr r0, =0xe000ed94                   \n" /* MPU_CTRL register. */
@@ -1116,11 +1135,11 @@ static void prvSetupMPU( void )
                                           ( portMPU_REGION_VALID ) |
                                           ( portUNPRIVILEGED_FLASH_REGION );
 
-        portMPU_REGION_ATTRIBUTE_REG = ( portMPU_REGION_READ_ONLY ) |
+		portMPU_REGION_ATTRIBUTE_REG = (portMPU_REGION_PRIVILEGED_READ_ONLY) |
+//		portMPU_REGION_ATTRIBUTE_REG = 		(portMPU_REGION_READ_WRITE) |
                                        ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
                                        ( prvGetMPURegionSizeSetting( ( uint32_t )&__FLASH_segment_end__ - ( uint32_t ) &__FLASH_segment_start__ ) ) |
-                                       ( portMPU_REGION_ENABLE );
-
+									   ( portMPU_REGION_ENABLE );
 		att[0] = ( portMPU_REGION_READ_ONLY ) |
                                        ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
                                        ( prvGetMPURegionSizeSetting( ( uint32_t )&__FLASH_segment_end__ - ( uint32_t ) &__FLASH_segment_start__ ) ) |
@@ -1260,18 +1279,140 @@ void vPortSwitchToUserMode( void )
     vResetPrivilege();
 }
 /*-----------------------------------------------------------*/
-
+#include "monitor.h"
+//ul ->Context Index
+//region_num -> MPU Region
+PRIVILEGED_FUNCTION
+void translateGeneric(xMPU_SETTINGS * xMPUSettings, int ul, int region_num, const struct xMEMORY_REGION * const xRegions) {
+	
+		int lIndex =0;
+   /* Translate the generic region definition contained in
+                 * xRegions into the CM3 specific MPU settings that are then
+                 * stored in xMPUSettings. */
+                xMPUSettings->xRegion[ ul ].ulRegionBaseAddress =
+                    ( ( uint32_t ) xRegions[ lIndex ].pvBaseAddress ) |
+                    ( portMPU_REGION_VALID ) |
+                    ( region_num); /* Region number. */
+                
+                xMPUSettings->xRegion[ ul ].ulRegionAttribute =
+                    ( prvGetMPURegionSizeSetting( xRegions[ lIndex ].ulLengthInBytes ) ) |
+                    ( xRegions[ lIndex ].ulParameters ) |
+                    ( portMPU_REGION_ENABLE );
+                
+                xMPUSettings->xRegionSettings[ ul ].ulRegionStartAddress = ( uint32_t ) xRegions[ lIndex ].pvBaseAddress;
+                xMPUSettings->xRegionSettings[ ul ].ulRegionEndAddress = ( uint32_t ) ( ( uint32_t ) xRegions[ lIndex ].pvBaseAddress + xRegions[ lIndex ].ulLengthInBytes - 1UL );        
+                xMPUSettings->xRegionSettings[ ul ].ulRegionPermissions = 0UL;
+                
+                if( ( ( xRegions[ lIndex ].ulParameters & portMPU_REGION_READ_ONLY ) == portMPU_REGION_READ_ONLY ) ||
+                    ( ( xRegions[ lIndex ].ulParameters & portMPU_REGION_PRIVILEGED_READ_WRITE_UNPRIV_READ_ONLY ) == portMPU_REGION_PRIVILEGED_READ_WRITE_UNPRIV_READ_ONLY ) )             
+                {   
+                    xMPUSettings->xRegionSettings[ ul ].ulRegionPermissions = tskMPU_READ_PERMISSION;
+                }
+                
+                if( ( xRegions[ lIndex ].ulParameters & portMPU_REGION_READ_WRITE ) == portMPU_REGION_READ_WRITE )
+                {
+                    xMPUSettings->xRegionSettings[ ul ].ulRegionPermissions = ( tskMPU_READ_PERMISSION | tskMPU_WRITE_PERMISSION );
+                }
+}
 void vPortStoreTaskMPUSettings( xMPU_SETTINGS * xMPUSettings,
                                 const struct xMEMORY_REGION * const xRegions,
                                 StackType_t * pxBottomOfStack,
-                                uint32_t ulStackDepth )
+                                uint32_t ulStackDepth, 
+								void * entry)
 {
     extern uint32_t __SRAM_segment_start__[];
     extern uint32_t __SRAM_segment_end__[];
     extern uint32_t __privileged_data_start__[];
     extern uint32_t __privileged_data_end__[];
+	extern uint32_t __bss_end__;
+	extern uint32_t __FlashEnd;
+	extern uint32_t __End_RAM;
+	extern uint32_t __syscalls_flash_end__[];
+	extern uint32_t __privileged_functions_region_size__;
+	extern uint32_t __bridge_end__;
+	extern uint32_t __privileged_functions_end__[];
     int32_t lIndex;
     uint32_t ul;
+
+#if 0
+	int compartmentID = getCompartmentFromAddr((unsigned int)entry);
+	SEC_INFO sinfo = comp_info[compartmentID];
+
+	// Anything from syscall to this task's code will be unaccessible
+	xMPUSettings->xRegion[ 0 ].ulRegionBaseAddress = ((uint32_t)&__syscalls_flash_end__) |  ( portMPU_REGION_VALID ) | 0x0;
+	xMPUSettings->xRegion[ 0 ].ulRegionAttribute =
+            ( portMPU_REGION_PRIVILEGED_READ_WRITE) |
+            ( prvGetMPURegionSizeSetting( ( uint32_t ) sinfo.start - ( uint32_t ) &__syscalls_flash_end__) ) |
+            ( portMPU_REGION_ENABLE );
+
+	// Anything from end of flash section to end of flash will be unaccessible
+	xMPUSettings->xRegion[ 1 ].ulRegionBaseAddress = sinfo.end |  ( portMPU_REGION_VALID ) | 0x1;
+	xMPUSettings->xRegion[ 1 ].ulRegionAttribute =
+            ( portMPU_REGION_PRIVILEGED_READ_WRITE) |
+            ( prvGetMPURegionSizeSetting( ( uint32_t ) &__FlashEnd - ( uint32_t ) sinfo.end) ) |
+            ( portMPU_REGION_ENABLE );
+
+	// Anything from shared_data to personal data will be inaccessible
+	xMPUSettings->xRegion[ 2 ].ulRegionBaseAddress = ((uint32_t)&__bss_end__) |  ( portMPU_REGION_VALID ) | 0x2;
+    xMPUSettings->xRegion[ 2 ].ulRegionAttribute =
+            ( portMPU_REGION_PRIVILEGED_READ_WRITE) |
+            ( portMPU_REGION_EXECUTE_NEVER ) |
+            ( prvGetMPURegionSizeSetting( ( uint32_t ) sinfo.dstart - ( uint32_t ) &__bss_end__) ) |
+            ( portMPU_REGION_ENABLE );
+
+
+	// Anything from personal data to end of address space will be inaccessible
+	xMPUSettings->xRegion[ 3 ].ulRegionBaseAddress = sinfo.dend |  ( portMPU_REGION_VALID ) | 0x3;
+	xMPUSettings->xRegion[ 3 ].ulRegionAttribute =
+            ( portMPU_REGION_PRIVILEGED_READ_WRITE) |
+            ( portMPU_REGION_EXECUTE_NEVER ) |
+            ( prvGetMPURegionSizeSetting( ( uint32_t ) &__End_RAM - ( uint32_t ) sinfo.dend) ) |
+            ( portMPU_REGION_ENABLE );
+
+	return;
+#endif 
+
+	//Setup Stack
+	/* Define the region that allows access to the stack. */
+            xMPUSettings->xRegion[ 0 ].ulRegionBaseAddress =
+                ( ( uint32_t ) pxBottomOfStack ) |
+                ( portMPU_REGION_VALID ) |
+                ( portSTACK_REGION ); /* Region number. */
+
+            xMPUSettings->xRegion[ 0 ].ulRegionAttribute =
+                ( portMPU_REGION_READ_WRITE ) |
+                ( portMPU_REGION_EXECUTE_NEVER ) |
+                ( prvGetMPURegionSizeSetting( ulStackDepth * ( uint32_t ) sizeof( StackType_t ) ) ) |
+                ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
+                ( portMPU_REGION_ENABLE );
+            xMPUSettings->xRegionSettings[ 0 ].ulRegionStartAddress = ( uint32_t ) pxBottomOfStack;
+            xMPUSettings->xRegionSettings[ 0 ].ulRegionEndAddress = ( uint32_t ) ( ( uint32_t ) ( pxBottomOfStack ) +
+                                                                                   ( ulStackDepth * ( uint32_t ) sizeof( StackType_t ) ) - 1UL );
+            xMPUSettings->xRegionSettings[ 0 ].ulRegionPermissions = ( tskMPU_READ_PERMISSION |
+                                                                       tskMPU_WRITE_PERMISSION );
+
+	int compartmentID = getCompartmentFromAddr((unsigned int)entry);
+    SEC_INFO sinfo = comp_info[compartmentID];
+
+	struct xMEMORY_REGION current;
+	current.ulLengthInBytes = sinfo.size;
+	current.pvBaseAddress = (void *)sinfo.start;
+	current.ulParameters = portMPU_REGION_READ_ONLY;
+	translateGeneric(xMPUSettings, 1,  CODREGION, &current);
+
+	current.ulLengthInBytes = sinfo.dsize;
+    current.pvBaseAddress = (void *)sinfo.dstart;
+	current.ulParameters = portMPU_REGION_READ_WRITE;
+	translateGeneric(xMPUSettings, 2,  DATAREGION, &current);
+
+	current.ulLengthInBytes = (unsigned int)&__bridge_end__ - (uint32_t) &__privileged_functions_end__;
+	current.pvBaseAddress = &__privileged_functions_end__;
+	current.ulParameters = portMPU_REGION_READ_ONLY;
+	translateGeneric(xMPUSettings, 3,  BRIDGE, &current);
+
+
+	
+	return;
 
     if( xRegions == NULL )
     {
