@@ -46,6 +46,33 @@
 
 #if ( configUSE_MPU_WRAPPERS_V1 == 0 )
 
+#define RTMK
+#ifdef RTMK
+int MPU_vSwitchView( int to, int push)__attribute__( ( naked ) ) FREERTOS_SYSTEM_CALL;
+
+        int MPU_vSwitchView( int to, int push) /* __attribute__ (( naked )) FREERTOS_SYSTEM_CALL */
+        {
+            __asm volatile
+            (
+                " .syntax unified                                       \n"
+                " .extern MPU_vSwitchViewImpl                            \n"
+                "                                                       \n"
+                " push {r0}                                             \n"
+                " mrs r0, control                                       \n"
+                " tst r0, #1                                            \n"
+                " bne MPU_vSwitchView_Unpriv                             \n"
+                " MPU_vSwitchView_Priv:                                  \n"
+                "     pop {r0}                                          \n"
+                "     b MPU_vSwitchViewImpl                              \n"
+                " MPU_vSwitchView_Unpriv:                                \n"
+                "     pop {r0}                                          \n"
+                "     svc %0                                            \n"
+                "                                                       \n"
+                : : "i" ( SYSTEM_CALL_vSwitchView ) : "memory"
+            );
+        }
+#endif
+
     #if ( INCLUDE_xTaskDelayUntil == 1 )
 
         BaseType_t MPU_xTaskDelayUntil( TickType_t * const pxPreviousWakeTime,

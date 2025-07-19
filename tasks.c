@@ -426,6 +426,10 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
     #if ( configUSE_POSIX_ERRNO == 1 )
         int iTaskErrno;
     #endif
+
+		int comp_id;
+		int stk_idx;
+		int ss[10];
 } tskTCB;
 
 /* The old tskTCB name is maintained above then typedefed to the new TCB_t name
@@ -1912,7 +1916,14 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
 
     #if ( portUSING_MPU_WRAPPERS == 1 )
     {
-        vPortStoreTaskMPUSettings( &( pxNewTCB->xMPUSettings ), xRegions, pxNewTCB->pxStack, ulStackDepth, pxTaskCode);
+		void * temp;
+		if (xRunPrivileged) {
+				temp = NULL;
+		} else {
+				temp = (void *)&pxNewTCB->comp_id; //We can probably use this for something useful
+				pxNewTCB->stk_idx = -1;
+		}
+        vPortStoreTaskMPUSettings( &( pxNewTCB->xMPUSettings ), temp, pxNewTCB->pxStack, ulStackDepth, pxTaskCode);
     }
     #else
     {
@@ -8700,4 +8711,17 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
     }
 
 #endif /* #if ( ( configSUPPORT_STATIC_ALLOCATION == 1 ) && ( configKERNEL_PROVIDED_STATIC_MEMORY == 1 ) && ( portUSING_MPU_WRAPPERS == 0 ) ) */
+int ss_update(int to, int push) {
+            if (push) {
+                    pxCurrentTCB->ss[++pxCurrentTCB->stk_idx] = to;
+            } else {
+					--pxCurrentTCB->stk_idx;
+					if (pxCurrentTCB->stk_idx>= 0) {
+	                    to = pxCurrentTCB->ss[pxCurrentTCB->stk_idx];
+					} else {
+						to = pxCurrentTCB->comp_id;
+					}
+            }
+			return to;
+}
 /*-----------------------------------------------------------*/

@@ -100,6 +100,7 @@
 #define SYSTEM_CALL_xStreamBufferBytesAvailable            67
 #define SYSTEM_CALL_xStreamBufferSetTriggerLevel           68
 #define SYSTEM_CALL_xStreamBufferNextMessageLengthBytes    69
-#define NUM_SYSTEM_CALLS                                   70  /* Total number of system calls. */
+#define SYSTEM_CALL_vSwitchView                            70
+#define NUM_SYSTEM_CALLS                                   71  /* Total number of system calls. */
 
 #endif /* MPU_SYSCALL_NUMBERS_H */

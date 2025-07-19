@@ -105,6 +105,34 @@
 
     #endif /* if ( INCLUDE_xTaskAbortDelay == 1 ) */
 /*-----------------------------------------------------------*/
+#define RTMK
+#ifdef RTMK
+int MPU_vSwitchView( int to, int push)__attribute__( ( naked ) ) FREERTOS_SYSTEM_CALL;
+
+        int MPU_vSwitchView( int to, int push) /* __attribute__ (( naked )) FREERTOS_SYSTEM_CALL */
+        {
+            __asm volatile
+            (
+                " .syntax unified                                       \n"
+                " .extern MPU_vTaskDelayImpl                            \n"
+                "                                                       \n"
+                " push {r0}                                             \n"
+                " mrs r0, control                                       \n"
+                " tst r0, #1                                            \n"
+                " bne MPU_vSwitchView_Unpriv                             \n"
+                " MPU_vTaskDelay_Priv:                                  \n"
+                "     pop {r0}                                          \n"
+                "     b MPU_vTaskDelayImpl                              \n"
+                " MPU_vSwitchView_Unpriv:                                \n"
+                "     pop {r0}                                          \n"
+                "     svc %0                                            \n"
+                "                                                       \n"
+                : : "i" ( SYSTEM_CALL_vSwitchView ) : "memory"
+            );
+        }
+#endif 
+
+	
 
     #if ( INCLUDE_vTaskDelay == 1 )
 

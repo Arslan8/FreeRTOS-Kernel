@@ -1123,6 +1123,7 @@ static void prvSetupMPU( void )
     extern uint32_t __FLASH_segment_end__[];
     extern uint32_t __privileged_data_start__[];
     extern uint32_t __privileged_data_end__[];
+	extern uint32_t  _shared_end, _shared_start;
 
     /* Check the expected MPU is present. */
     if( portMPU_TYPE_REG == portEXPECTED_MPU_TYPE_VALUE )
@@ -1185,6 +1186,27 @@ static void prvSetupMPU( void )
                                        ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
                                        ( portMPU_REGION_EXECUTE_NEVER ) |
                                        prvGetMPURegionSizeSetting( ( uint32_t ) &__privileged_data_end__ - ( uint32_t ) &__privileged_data_start__ ) |
+                                       ( portMPU_REGION_ENABLE );
+
+
+		/* Shared Region */
+		portMPU_REGION_BASE_ADDRESS_REG = ( ( uint32_t ) &_shared_start ) | /* Base address. */
+                                          ( portMPU_REGION_VALID ) |
+                                          ( portSHARED_RAM_REGION);
+
+        bar[2] = ( ( uint32_t ) &_shared_start ) | /* Base address. */
+                                          ( portMPU_REGION_VALID ) |
+                                          ( portSHARED_RAM_REGION );
+
+        portMPU_REGION_ATTRIBUTE_REG = ( portMPU_REGION_READ_WRITE ) |
+                                       ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
+                                       ( portMPU_REGION_EXECUTE_NEVER ) |
+                                       prvGetMPURegionSizeSetting( ( uint32_t ) &_shared_end - ( uint32_t ) &_shared_start ) |
+                                       ( portMPU_REGION_ENABLE );
+        att[2] = ( portMPU_REGION_READ_WRITE ) |
+                                       ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
+                                       ( portMPU_REGION_EXECUTE_NEVER ) |
+                                       prvGetMPURegionSizeSetting( ( uint32_t ) &_shared_end - ( uint32_t ) &_shared_start ) |
                                        ( portMPU_REGION_ENABLE );
 
         /* By default allow everything to access the general peripherals.  The
@@ -1282,6 +1304,54 @@ void vPortSwitchToUserMode( void )
 #include "monitor.h"
 //ul ->Context Index
 //region_num -> MPU Region
+
+PRIVILEGED_FUNCTION
+void set_region(int region_num, const struct xMEMORY_REGION * const xRegions) {
+		/* First setup the unprivileged flash for unprivileged read only access. */
+        portMPU_REGION_BASE_ADDRESS_REG = ( ( uint32_t ) xRegions[ 0 ].pvBaseAddress ) | /* Base address. */
+                                          ( portMPU_REGION_VALID ) |
+                                          ( region_num );
+
+        portMPU_REGION_ATTRIBUTE_REG = ( xRegions[ 0 ].ulParameters) |
+                                       ( prvGetMPURegionSizeSetting( xRegions[ 0 ].ulLengthInBytes ) ) |
+                                       ( portMPU_REGION_ENABLE );
+
+}
+
+extern PRIVILEGED_FUNCTION int ss_update(int, int);
+PRIVILEGED_FUNCTION
+int MPU_vSwitchViewImpl(int to, int push) {
+			portMPU_CTRL_REG  = 0;
+			to = ss_update(to, push);
+			SEC_INFO sinfo = comp_info[to];
+
+		    struct xMEMORY_REGION current;
+		    current.ulLengthInBytes = sinfo.size;
+		    current.pvBaseAddress = (void *)sinfo.start;
+		    current.ulParameters = portMPU_REGION_READ_ONLY;
+		    set_region(CODREGION, &current);
+
+		    current.ulLengthInBytes = sinfo.dsize;
+		    current.pvBaseAddress = (void *)sinfo.dstart;
+		    current.ulParameters = portMPU_REGION_READ_WRITE;
+		    set_region(DATAREGION, &current);
+
+#if 0
+		    current.ulLengthInBytes = (unsigned int)&__bridge_end__ - (uint32_t) &__privileged_functions_end__;
+		    current.pvBaseAddress = &__privileged_functions_end__;
+		    current.ulParameters = portMPU_REGION_READ_ONLY;
+		    set_region(BRIDGE, &current);
+#endif 
+
+			/* Enable the memory fault exception. */
+	        portNVIC_SYS_CTRL_STATE_REG |= portNVIC_MEM_FAULT_ENABLE;
+
+    	    /* Enable the MPU with the background region configured. */
+        	portMPU_CTRL_REG |= ( portMPU_ENABLE | portMPU_BACKGROUND_ENABLE );
+
+			//TODO: There was some need for stack, i don't remember currently
+			return to;
+}
 PRIVILEGED_FUNCTION
 void translateGeneric(xMPU_SETTINGS * xMPUSettings, int ul, int region_num, const struct xMEMORY_REGION * const xRegions) {
 	
@@ -1370,7 +1440,38 @@ void vPortStoreTaskMPUSettings( xMPU_SETTINGS * xMPUSettings,
             ( portMPU_REGION_ENABLE );
 
 	return;
-#endif 
+#endif
+	if( xRegions == NULL )
+    {
+        /* No MPU regions are specified so allow access to all RAM. */
+        xMPUSettings->xRegion[ 0 ].ulRegionBaseAddress =
+            ( ( uint32_t ) &__SRAM_segment_start__ ) | /* Base address. */
+            ( portMPU_REGION_VALID ) |
+            ( portSTACK_REGION );                     /* Region number. */
+
+        xMPUSettings->xRegion[ 0 ].ulRegionAttribute =
+            ( portMPU_REGION_READ_WRITE ) |
+            ( portMPU_REGION_CACHEABLE_BUFFERABLE ) |
+            ( portMPU_REGION_EXECUTE_NEVER ) |
+            ( prvGetMPURegionSizeSetting( ( uint32_t ) &__SRAM_segment_end__ - ( uint32_t ) &__SRAM_segment_start__ ) ) |
+            ( portMPU_REGION_ENABLE );
+
+        xMPUSettings->xRegionSettings[ 0 ].ulRegionStartAddress = ( uint32_t ) &__SRAM_segment_start__;
+        xMPUSettings->xRegionSettings[ 0 ].ulRegionEndAddress = ( uint32_t ) &__SRAM_segment_end__;
+        xMPUSettings->xRegionSettings[ 0 ].ulRegionPermissions = ( tskMPU_READ_PERMISSION |
+                                                                   tskMPU_WRITE_PERMISSION );
+
+		int prg_regions[] = {CODREGION, DATAREGION, BRIDGE};
+        /* Invalidate user configurable regions. */
+        for( ul = 1UL; ul <= portNUM_CONFIGURABLE_REGIONS; ul++ )
+        {
+            xMPUSettings->xRegion[ ul ].ulRegionBaseAddress = ( ( prg_regions[ ul ]) | portMPU_REGION_VALID );
+            xMPUSettings->xRegion[ ul ].ulRegionAttribute = 0UL;
+            xMPUSettings->xRegionSettings[ ul ].ulRegionStartAddress = 0UL;
+            xMPUSettings->xRegionSettings[ ul ].ulRegionEndAddress = 0UL;
+            xMPUSettings->xRegionSettings[ ul ].ulRegionPermissions = 0UL;
+        }
+    } else {
 
 	//Setup Stack
 	/* Define the region that allows access to the stack. */
@@ -1409,6 +1510,9 @@ void vPortStoreTaskMPUSettings( xMPU_SETTINGS * xMPUSettings,
 	current.pvBaseAddress = &__privileged_functions_end__;
 	current.ulParameters = portMPU_REGION_READ_ONLY;
 	translateGeneric(xMPUSettings, 3,  BRIDGE, &current);
+
+	*((unsigned int* )xRegions) = compartmentID;
+	}
 
 
 	

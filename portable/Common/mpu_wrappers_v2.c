@@ -1375,6 +1375,8 @@ static KernelObject_t xKernelObjectPool[ configPROTECTED_KERNEL_OBJECT_POOL_SIZE
             return xReturn;
         }
 
+		
+
         BaseType_t MPU_xTaskGenericNotifyWaitImpl( const xTaskGenericNotifyWaitParams_t * pxParams ) PRIVILEGED_FUNCTION;
 
         BaseType_t MPU_xTaskGenericNotifyWaitImpl( const xTaskGenericNotifyWaitParams_t * pxParams ) /* PRIVILEGED_FUNCTION */
@@ -4835,7 +4837,7 @@ static KernelObject_t xKernelObjectPool[ configPROTECTED_KERNEL_OBJECT_POOL_SIZE
         return xReturn;
     }
 /*-----------------------------------------------------------*/
-
+extern int MPU_vSwitchViewImpl(int, int);
     BaseType_t MPU_xStreamBufferSendCompletedFromISR( StreamBufferHandle_t xStreamBuffer,
                                                       BaseType_t * pxHigherPriorityTaskWoken ) /* PRIVILEGED_FUNCTION */
     {
@@ -5127,7 +5129,8 @@ static KernelObject_t xKernelObjectPool[ configPROTECTED_KERNEL_OBJECT_POOL_SIZE
         ( UBaseType_t ) MPU_xStreamBufferSpacesAvailableImpl,               /* SYSTEM_CALL_xStreamBufferSpacesAvailable. */
         ( UBaseType_t ) MPU_xStreamBufferBytesAvailableImpl,                /* SYSTEM_CALL_xStreamBufferBytesAvailable. */
         ( UBaseType_t ) MPU_xStreamBufferSetTriggerLevelImpl,               /* SYSTEM_CALL_xStreamBufferSetTriggerLevel. */
-        ( UBaseType_t ) MPU_xStreamBufferNextMessageLengthBytesImpl         /* SYSTEM_CALL_xStreamBufferNextMessageLengthBytes. */
+        ( UBaseType_t ) MPU_xStreamBufferNextMessageLengthBytesImpl,         /* SYSTEM_CALL_xStreamBufferNextMessageLengthBytes. */
+		( UBaseType_t ) MPU_vSwitchViewImpl /* SYSTEM_CALL_vSwitchView */
     };
 /*-----------------------------------------------------------*/
 
